@@ -1,0 +1,58 @@
+# Single command to run everything:  docker compose -f docker/docker-compose.yml up
+#
+# Two services on the host network so ROS 2 discovery works between them:
+#   isaac  - NVIDIA Isaac Sim 5.1, runs the simulation headless from Python
+#   ros    - ROS 2 Jazzy tooling: RViz, teleop, topic verification
+
+services:
+  isaac:
+    image: nvcr.io/nvidia/isaac-sim:5.1.0
+    container_name: husky_isaac
+    entrypoint: /workspace/docker/entrypoint.sh
+    user: "1234:1234"
+    network_mode: host
+    ipc: host
+    environment:
+      - ACCEPT_EULA=Y
+      - PRIVACY_CONSENT=Y
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+      - HEADLESS=${HEADLESS:-1}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ..:/workspace:rw
+      # Persist caches across container restarts. Without these you pay the
+      # full shader compile (~4 min) on every single start.
+      - isaac-cache-kit:/isaac-sim/.cache
+      - isaac-cache-compute:/isaac-sim/.nv/ComputeCache
+      - isaac-logs:/isaac-sim/.nvidia-omniverse/logs
+      - isaac-config:/isaac-sim/.nvidia-omniverse/config
+      - isaac-data:/isaac-sim/.local/share/ov/data
+
+  ros:
+    image: osrf/ros:jazzy-desktop
+    container_name: husky_ros
+    network_mode: host
+    ipc: host
+    environment:
+      - ROS_DOMAIN_ID=0
+      - RMW_IMPLEMENTATION=rmw_fastrtps_cpp
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+    volumes:
+      - ..:/workspace:rw
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    command: tail -f /dev/null
+
+volumes:
+  isaac-cache-kit:
+  isaac-cache-compute:
+  isaac-logs:
+  isaac-config:
+  isaac-data:
