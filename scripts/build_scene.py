@@ -62,7 +62,11 @@ from pxr import Gf, PhysxSchema, Sdf, UsdGeom, UsdLux, UsdPhysics  # noqa: E402
 
 from isaacsim.core.api import SimulationContext  # noqa: E402
 from isaacsim.core.prims import Articulation  # noqa: E402
-from isaacsim.core.utils.stage import is_stage_loading  # noqa: E402
+from isaacsim.core.utils.stage import (  # noqa: E402
+    is_stage_loading,
+    create_new_stage,
+    add_reference_to_stage,
+)
 from isaacsim.storage.native import get_assets_root_path  # noqa: E402
 from isaacsim.core.utils.extensions import enable_extension  # noqa: E402
 
@@ -87,6 +91,15 @@ def log(msg):
 
 # ------------------------------------------------------- 1. warehouse --------
 def load_warehouse():
+    """
+    Build a LOCAL stage and reference the warehouse into it.
+
+    Opening the warehouse USD directly with open_stage() makes NVIDIA's
+    read-only S3 layer the edit target. The URDF importer then tries to save
+    the robot back into that layer, is refused, and the stage is invalidated.
+    Referencing keeps the environment read-only while all authoring happens
+    on a local anonymous root layer.
+    """
     assets_root = get_assets_root_path()
     if assets_root is None:
         carb.log_error("Could not resolve the Isaac Sim assets root")
@@ -94,16 +107,27 @@ def load_warehouse():
         sys.exit(1)
 
     env_usd = assets_root + args.env
-    log(f"opening environment: {env_usd}")
-    omni.usd.get_context().open_stage(env_usd, None)
+    log("creating local stage")
+    create_new_stage()
+    simulation_app.update()
 
-    # Two updates so the stage begins loading, then wait it out.
+    stage = omni.usd.get_context().get_stage()
+    world = UsdGeom.Xform.Define(stage, Sdf.Path("/World"))
+    stage.SetDefaultPrim(world.GetPrim())
+    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+    UsdGeom.SetStageMetersPerUnit(stage, 1.0)
+
+    log("referencing environment: " + env_usd)
+    add_reference_to_stage(usd_path=env_usd, prim_path="/World/Warehouse")
+
     simulation_app.update()
     simulation_app.update()
     while is_stage_loading():
         simulation_app.update()
-    log("environment loaded")
-    return omni.usd.get_context().get_stage()
+
+    stage = omni.usd.get_context().get_stage()
+    log("environment referenced and loaded")
+    return stage
 
 
 # ------------------------------------------------------ 2. urdf import -------
