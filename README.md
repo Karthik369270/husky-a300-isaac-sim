@@ -12,12 +12,7 @@ was authored through the GUI.
 
 ## Demo
 
-**Video:** <!-- PASTE YOUR VIDEO LINK HERE -->
-
-> Replace the line above with your link, e.g.
-> `**Video:** https://drive.google.com/file/d/XXXXXXXX/view`
-> Google Drive, YouTube (unlisted) and Loom all work. Set sharing to
-> "anyone with the link can view" and test it in a private browser window.
+**Video:** https://drive.google.com/drive/folders/1ejChhwNRVRFexPjLbMvPaOqZl_3bpcQR?usp=sharing
 
 The recording shows, in Foxglove: the full 37-frame transform tree updating
 live, the LiDAR point cloud of the warehouse interior, the camera topic, and
