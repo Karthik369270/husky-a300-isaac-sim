@@ -45,6 +45,10 @@ def create_camera_prim(stage, optical_frame_path):
     xform = UsdGeom.Xformable(prim)
     xform.ClearXformOpOrder()
     xform.AddRotateXOp().Set(180.0)
+    # Offset clear of the sensor arch: the optical frame sits
+    # against the enclosure, so a camera placed exactly there
+    # renders the inside of the robot's own geometry.
+    xform.AddTranslateOp().Set(Gf.Vec3d(0.0, 0.0, -0.15))
 
     # ZED 2 left lens, approximate
     cam.CreateFocalLengthAttr(2.12)
@@ -88,31 +92,41 @@ def build_camera_graph(stage, camera_prim_path):
                     ("CamInfo", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
                 ],
                 keys.CONNECT: [
-                    ("OnTick.outputs:tick", "CreateRP.inputs:execIn"),
-                    ("CreateRP.outputs:execOut", "CamRgb.inputs:execIn"),
-                    ("CreateRP.outputs:execOut", "CamDepth.inputs:execIn"),
-                    ("CreateRP.outputs:execOut", "CamInfo.inputs:execIn"),
-                    ("CreateRP.outputs:renderProductPath",
-                     "CamRgb.inputs:renderProductPath"),
-                    ("CreateRP.outputs:renderProductPath",
-                     "CamDepth.inputs:renderProductPath"),
-                    ("CreateRP.outputs:renderProductPath",
-                     "CamInfo.inputs:renderProductPath"),
-                    ("Context.outputs:context", "CamRgb.inputs:context"),
-                    ("Context.outputs:context", "CamDepth.inputs:context"),
-                    ("Context.outputs:context", "CamInfo.inputs:context"),
+                    # Nodes created in an earlier edit() call must be referenced
+                    # by full path; only nodes created in THIS call resolve by
+                    # short name.
+                    (f"{GRAPH_PATH}/OnTick.outputs:tick",
+                     f"{GRAPH_PATH}/CreateRP.inputs:execIn"),
+                    (f"{GRAPH_PATH}/CreateRP.outputs:execOut",
+                     f"{GRAPH_PATH}/CamRgb.inputs:execIn"),
+                    (f"{GRAPH_PATH}/CreateRP.outputs:execOut",
+                     f"{GRAPH_PATH}/CamDepth.inputs:execIn"),
+                    (f"{GRAPH_PATH}/CreateRP.outputs:execOut",
+                     f"{GRAPH_PATH}/CamInfo.inputs:execIn"),
+                    (f"{GRAPH_PATH}/CreateRP.outputs:renderProductPath",
+                     f"{GRAPH_PATH}/CamRgb.inputs:renderProductPath"),
+                    (f"{GRAPH_PATH}/CreateRP.outputs:renderProductPath",
+                     f"{GRAPH_PATH}/CamDepth.inputs:renderProductPath"),
+                    (f"{GRAPH_PATH}/CreateRP.outputs:renderProductPath",
+                     f"{GRAPH_PATH}/CamInfo.inputs:renderProductPath"),
+                    (f"{GRAPH_PATH}/Context.outputs:context",
+                     f"{GRAPH_PATH}/CamRgb.inputs:context"),
+                    (f"{GRAPH_PATH}/Context.outputs:context",
+                     f"{GRAPH_PATH}/CamDepth.inputs:context"),
+                    (f"{GRAPH_PATH}/Context.outputs:context",
+                     f"{GRAPH_PATH}/CamInfo.inputs:context"),
                 ],
                 keys.SET_VALUES: [
-                    ("CreateRP.inputs:width", RESOLUTION[0]),
-                    ("CreateRP.inputs:height", RESOLUTION[1]),
-                    ("CamRgb.inputs:topicName", "/camera/image_raw"),
-                    ("CamRgb.inputs:type", "rgb"),
-                    ("CamRgb.inputs:frameId", CAMERA_FRAME),
-                    ("CamDepth.inputs:topicName", "/camera/depth"),
-                    ("CamDepth.inputs:type", "depth"),
-                    ("CamDepth.inputs:frameId", CAMERA_FRAME),
-                    ("CamInfo.inputs:topicName", "/camera/camera_info"),
-                    ("CamInfo.inputs:frameId", CAMERA_FRAME),
+                    (f"{GRAPH_PATH}/CreateRP.inputs:width", RESOLUTION[0]),
+                    (f"{GRAPH_PATH}/CreateRP.inputs:height", RESOLUTION[1]),
+                    (f"{GRAPH_PATH}/CamRgb.inputs:topicName", "/camera/image_raw"),
+                    (f"{GRAPH_PATH}/CamRgb.inputs:type", "rgb"),
+                    (f"{GRAPH_PATH}/CamRgb.inputs:frameId", CAMERA_FRAME),
+                    (f"{GRAPH_PATH}/CamDepth.inputs:topicName", "/camera/depth"),
+                    (f"{GRAPH_PATH}/CamDepth.inputs:type", "depth"),
+                    (f"{GRAPH_PATH}/CamDepth.inputs:frameId", CAMERA_FRAME),
+                    (f"{GRAPH_PATH}/CamInfo.inputs:topicName", "/camera/camera_info"),
+                    (f"{GRAPH_PATH}/CamInfo.inputs:frameId", CAMERA_FRAME),
                 ],
             },
         )
