@@ -34,7 +34,10 @@ def yaw_of(q):
 class ScrubTest(Node):
     def __init__(self):
         super().__init__("scrub_test")
-        self.declare_parameter("use_sim_time", True)
+        # use_sim_time is auto-declared by rclpy in Jazzy; set it, do not
+        # re-declare. Timestamps come from /clock, published by Isaac Sim.
+        self.set_parameters([rclpy.parameter.Parameter(
+            "use_sim_time", rclpy.Parameter.Type.BOOL, True)])
         qos = QoSProfile(depth=10, reliability=ReliabilityPolicy.BEST_EFFORT)
         self.pub = self.create_publisher(Twist, "/cmd_vel", 10)
         self.sub = self.create_subscription(Odometry, "/odom", self.on_odom, qos)

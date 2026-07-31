@@ -88,41 +88,31 @@ def build_camera_graph(stage, camera_prim_path):
                     ("CamInfo", "isaacsim.ros2.bridge.ROS2CameraInfoHelper"),
                 ],
                 keys.CONNECT: [
-                    # Nodes created in an earlier edit() call must be referenced
-                    # by full path; only nodes created in THIS call resolve by
-                    # short name.
-                    (f"{GRAPH_PATH}/OnTick.outputs:tick",
-                     f"{GRAPH_PATH}/CreateRP.inputs:execIn"),
-                    (f"{GRAPH_PATH}/CreateRP.outputs:execOut",
-                     f"{GRAPH_PATH}/CamRgb.inputs:execIn"),
-                    (f"{GRAPH_PATH}/CreateRP.outputs:execOut",
-                     f"{GRAPH_PATH}/CamDepth.inputs:execIn"),
-                    (f"{GRAPH_PATH}/CreateRP.outputs:execOut",
-                     f"{GRAPH_PATH}/CamInfo.inputs:execIn"),
-                    (f"{GRAPH_PATH}/CreateRP.outputs:renderProductPath",
-                     f"{GRAPH_PATH}/CamRgb.inputs:renderProductPath"),
-                    (f"{GRAPH_PATH}/CreateRP.outputs:renderProductPath",
-                     f"{GRAPH_PATH}/CamDepth.inputs:renderProductPath"),
-                    (f"{GRAPH_PATH}/CreateRP.outputs:renderProductPath",
-                     f"{GRAPH_PATH}/CamInfo.inputs:renderProductPath"),
-                    (f"{GRAPH_PATH}/Context.outputs:context",
-                     f"{GRAPH_PATH}/CamRgb.inputs:context"),
-                    (f"{GRAPH_PATH}/Context.outputs:context",
-                     f"{GRAPH_PATH}/CamDepth.inputs:context"),
-                    (f"{GRAPH_PATH}/Context.outputs:context",
-                     f"{GRAPH_PATH}/CamInfo.inputs:context"),
+                    ("OnTick.outputs:tick", "CreateRP.inputs:execIn"),
+                    ("CreateRP.outputs:execOut", "CamRgb.inputs:execIn"),
+                    ("CreateRP.outputs:execOut", "CamDepth.inputs:execIn"),
+                    ("CreateRP.outputs:execOut", "CamInfo.inputs:execIn"),
+                    ("CreateRP.outputs:renderProductPath",
+                     "CamRgb.inputs:renderProductPath"),
+                    ("CreateRP.outputs:renderProductPath",
+                     "CamDepth.inputs:renderProductPath"),
+                    ("CreateRP.outputs:renderProductPath",
+                     "CamInfo.inputs:renderProductPath"),
+                    ("Context.outputs:context", "CamRgb.inputs:context"),
+                    ("Context.outputs:context", "CamDepth.inputs:context"),
+                    ("Context.outputs:context", "CamInfo.inputs:context"),
                 ],
                 keys.SET_VALUES: [
-                    (f"{GRAPH_PATH}/CreateRP.inputs:width", RESOLUTION[0]),
-                    (f"{GRAPH_PATH}/CreateRP.inputs:height", RESOLUTION[1]),
-                    (f"{GRAPH_PATH}/CamRgb.inputs:topicName", "/camera/image_raw"),
-                    (f"{GRAPH_PATH}/CamRgb.inputs:type", "rgb"),
-                    (f"{GRAPH_PATH}/CamRgb.inputs:frameId", CAMERA_FRAME),
-                    (f"{GRAPH_PATH}/CamDepth.inputs:topicName", "/camera/depth"),
-                    (f"{GRAPH_PATH}/CamDepth.inputs:type", "depth"),
-                    (f"{GRAPH_PATH}/CamDepth.inputs:frameId", CAMERA_FRAME),
-                    (f"{GRAPH_PATH}/CamInfo.inputs:topicName", "/camera/camera_info"),
-                    (f"{GRAPH_PATH}/CamInfo.inputs:frameId", CAMERA_FRAME),
+                    ("CreateRP.inputs:width", RESOLUTION[0]),
+                    ("CreateRP.inputs:height", RESOLUTION[1]),
+                    ("CamRgb.inputs:topicName", "/camera/image_raw"),
+                    ("CamRgb.inputs:type", "rgb"),
+                    ("CamRgb.inputs:frameId", CAMERA_FRAME),
+                    ("CamDepth.inputs:topicName", "/camera/depth"),
+                    ("CamDepth.inputs:type", "depth"),
+                    ("CamDepth.inputs:frameId", CAMERA_FRAME),
+                    ("CamInfo.inputs:topicName", "/camera/camera_info"),
+                    ("CamInfo.inputs:frameId", CAMERA_FRAME),
                 ],
             },
         )
@@ -154,3 +144,109 @@ def setup_camera(stage, robot_prim_path):
     create_camera_prim(stage, optical)
     cam_path = reparent_camera(stage, optical)
     return build_camera_graph(stage, cam_path)
+
+
+# ============================================================== LIDAR ========
+LIDAR_PRIM = "/World/husky_ouster_os1"
+LIDAR_FRAME = "lidar3d_0_sensor_link"
+
+
+def create_lidar_prim(stage, sensor_frame_path):
+    """
+    Create an RTX LiDAR at the Ouster OS1 mount frame.
+
+    The URDF gives only an empty frame here - the sensor itself has to be
+    created in the simulator and wired up. Isaac Sim ships an OS1 config
+    which is used if available, otherwise a generic rotary profile.
+    """
+    import omni.kit.commands
+
+    target = f"{sensor_frame_path}/husky_ouster_os1"
+
+    # This build ships no Ouster OS1 profile (checked: no OS1/Ouster json in
+    # omni.sensors.nv.common/data/lidar). Example_Rotary is a generic spinning
+    # 3D profile and is used instead; the mount pose and frame_id remain those
+    # of the OS1 as specified. Noted as a limitation in the README.
+    for cfg in ("Example_Rotary", "Example_Rotary_BEAMS", "OS1_REV6_128ch10hz1024res"):
+        try:
+            result, prim = omni.kit.commands.execute(
+                "IsaacSensorCreateRtxLidar",
+                path="husky_ouster_os1",
+                parent=sensor_frame_path,
+                config=cfg,
+                translation=Gf.Vec3d(0.0, 0.0, 0.0),
+                orientation=Gf.Quatd(1.0, 0.0, 0.0, 0.0),
+            )
+            if result and prim is not None:
+                # Use the prim the command actually created. The path is not
+                # reliably predictable from the arguments, and pointing the
+                # render product at a non-existent path yields
+                # "Render product not attached to RTX Lidar".
+                actual = str(prim.GetPath()) if hasattr(prim, "GetPath") else str(prim)
+                log(f"RTX LiDAR created at {actual} with config '{cfg}'")
+                return actual
+        except Exception as exc:
+            log(f"lidar config '{cfg}' failed: {exc!r}")
+
+    log("could not create RTX LiDAR with any known config")
+    return None
+
+
+def build_lidar_graph(stage, lidar_prim_path):
+    """Publish the LiDAR return as sensor_msgs/PointCloud2 on /points."""
+    keys = og.Controller.Keys
+    log("building lidar graph")
+
+    try:
+        og.Controller.edit(
+            GRAPH_PATH,
+            {
+                keys.CREATE_NODES: [
+                    ("CreateRPLidar", "isaacsim.core.nodes.IsaacCreateRenderProduct"),
+                    ("LidarPub", "isaacsim.ros2.bridge.ROS2RtxLidarHelper"),
+                ],
+                keys.CONNECT: [
+                    (f"{GRAPH_PATH}/OnTick.outputs:tick",
+                     f"{GRAPH_PATH}/CreateRPLidar.inputs:execIn"),
+                    (f"{GRAPH_PATH}/CreateRPLidar.outputs:execOut",
+                     f"{GRAPH_PATH}/LidarPub.inputs:execIn"),
+                    (f"{GRAPH_PATH}/CreateRPLidar.outputs:renderProductPath",
+                     f"{GRAPH_PATH}/LidarPub.inputs:renderProductPath"),
+                    (f"{GRAPH_PATH}/Context.outputs:context",
+                     f"{GRAPH_PATH}/LidarPub.inputs:context"),
+                ],
+                keys.SET_VALUES: [
+                    (f"{GRAPH_PATH}/LidarPub.inputs:topicName", "/points"),
+                    (f"{GRAPH_PATH}/LidarPub.inputs:frameId", LIDAR_FRAME),
+                    (f"{GRAPH_PATH}/LidarPub.inputs:type", "point_cloud"),
+                ],
+            },
+        )
+    except Exception as exc:
+        log(f"lidar graph FAILED: {exc!r}")
+        for n in ("CreateRPLidar", "LidarPub"):
+            describe_node(f"{GRAPH_PATH}/{n}")
+        return False
+
+    set_targets(stage, f"{GRAPH_PATH}/CreateRPLidar", "inputs:cameraPrim",
+                [lidar_prim_path])
+    log("lidar graph built")
+    return True
+
+
+def setup_lidar(stage, robot_prim_path):
+    """Locate the LiDAR mount frame, create the sensor, wire the publisher."""
+    frame = None
+    for prim in stage.Traverse():
+        if prim.GetName() == LIDAR_FRAME:
+            frame = str(prim.GetPath())
+            break
+    if frame is None:
+        log(f"lidar frame {LIDAR_FRAME} not found")
+        return False
+
+    log(f"lidar mount frame: {frame}")
+    lidar_path = create_lidar_prim(stage, frame)
+    if lidar_path is None:
+        return False
+    return build_lidar_graph(stage, lidar_path)

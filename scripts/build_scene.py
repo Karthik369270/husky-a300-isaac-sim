@@ -40,6 +40,11 @@ parser.add_argument("--save-usd", default="",
                     help="Optional path to save the composed stage")
 parser.add_argument("--frames", type=int, default=0,
                     help="Run N frames then exit (0 = run forever)")
+parser.add_argument("--wheel-friction", type=float, default=0.0,
+                    help="Static/dynamic friction on wheel colliders "
+                         "(0 = leave PhysX defaults)")
+parser.add_argument("--lidar", action="store_true",
+                    help="Publish the Ouster OS1 point cloud (bonus)")
 parser.add_argument("--camera", action="store_true",
                     help="Publish the ZED camera (bonus task)")
 parser.add_argument("--no-ros", action="store_true",
@@ -248,6 +253,38 @@ def configure_velocity_drives(joint_prims):
     return drives
 
 
+def apply_wheel_friction(stage, robot_prim_path):
+    """
+    Give the wheel colliders a rubber-like friction material.
+
+    PhysX defaults are around 0.5, which is closer to plastic than to outdoor
+    tyres on concrete. Measured scrub with the defaults required a
+    wheel_separation_multiplier near 7, against Clearpath's hardware value of
+    1.75 - a sign the friction model, not the kinematics, was the problem.
+    """
+    from pxr import UsdShade, PhysxSchema as _Px
+    mu = args.wheel_friction
+    mat_path = Sdf.Path("/World/PhysicsMaterials/WheelRubber")
+    UsdShade.Material.Define(stage, mat_path)
+    mat_prim = stage.GetPrimAtPath(mat_path)
+    phys_mat = UsdPhysics.MaterialAPI.Apply(mat_prim)
+    phys_mat.CreateStaticFrictionAttr().Set(mu)
+    phys_mat.CreateDynamicFrictionAttr().Set(mu)
+    phys_mat.CreateRestitutionAttr().Set(0.0)
+    log(f"wheel friction material mu={mu}")
+
+    n = 0
+    for prim in stage.Traverse():
+        path = str(prim.GetPath())
+        if "wheel_link" in path and "collisions" in path:
+            binding = UsdShade.MaterialBindingAPI.Apply(prim)
+            binding.Bind(UsdShade.Material(stage.GetPrimAtPath(mat_path)),
+                         bindingStrength=UsdShade.Tokens.weakerThanDescendants,
+                         materialPurpose="physics")
+            n += 1
+    log(f"friction material bound to {n} wheel collider prims")
+
+
 # ------------------------------------------------------- 5. placement --------
 def place_robot(stage, prim_path):
     prim = stage.GetPrimAtPath(prim_path)
@@ -312,6 +349,8 @@ def main():
 
     place_robot(stage, prim_path)
     tune_physics(stage)
+    if args.wheel_friction > 0.0:
+        apply_wheel_friction(stage, prim_path)
     joint_prims = find_wheel_joint_prims(stage)
     drives = configure_velocity_drives(joint_prims)
 
@@ -330,6 +369,8 @@ def main():
             )
             if args.camera:
                 sensors.setup_camera(stage, prim_path)
+            if args.lidar:
+                sensors.setup_lidar(stage, prim_path)
 
     if args.save_usd:
         stage.Export(args.save_usd)
