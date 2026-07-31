@@ -2,7 +2,7 @@
 # Captures the evidence the assignment asks for: `ros2 topic list` plus
 # `ros2 topic hz` for every required topic. Run inside the `ros` service.
 #   docker compose -f docker/docker-compose.yml exec ros /workspace/scripts/verify_topics.sh
-set -uo pipefail
+set -o pipefail
 source /opt/ros/jazzy/setup.bash
 OUT=/workspace/docs/topic_evidence.md
 HZ_WINDOW=8

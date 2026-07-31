@@ -117,6 +117,7 @@ def build_ros_graph(stage, robot_prim_path, base_link_path, domain_id=0):
                 ("PublishClock", "isaacsim.ros2.bridge.ROS2PublishClock"),
                 ("PublishJointState", "isaacsim.ros2.bridge.ROS2PublishJointState"),
                 ("PublishTF", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
+                ("PublishTFStatic", "isaacsim.ros2.bridge.ROS2PublishTransformTree"),
 
                 ("ComputeOdom", "isaacsim.core.nodes.IsaacComputeOdometry"),
                 ("PublishOdom", "isaacsim.ros2.bridge.ROS2PublishOdometry"),
@@ -129,6 +130,7 @@ def build_ros_graph(stage, robot_prim_path, base_link_path, domain_id=0):
                 ("OnTick.outputs:tick", "PublishClock.inputs:execIn"),
                 ("OnTick.outputs:tick", "PublishJointState.inputs:execIn"),
                 ("OnTick.outputs:tick", "PublishTF.inputs:execIn"),
+                ("OnTick.outputs:tick", "PublishTFStatic.inputs:execIn"),
                 ("OnTick.outputs:tick", "ComputeOdom.inputs:execIn"),
                 ("OnTick.outputs:tick", "SubscribeTwist.inputs:execIn"),
 
@@ -137,6 +139,7 @@ def build_ros_graph(stage, robot_prim_path, base_link_path, domain_id=0):
                 ("ReadSimTime.outputs:simulationTime", "PublishClock.inputs:timeStamp"),
                 ("ReadSimTime.outputs:simulationTime", "PublishJointState.inputs:timeStamp"),
                 ("ReadSimTime.outputs:simulationTime", "PublishTF.inputs:timeStamp"),
+                ("ReadSimTime.outputs:simulationTime", "PublishTFStatic.inputs:timeStamp"),
                 ("ReadSimTime.outputs:simulationTime", "PublishOdom.inputs:timeStamp"),
                 ("ReadSimTime.outputs:simulationTime", "PublishOdomTF.inputs:timeStamp"),
 
@@ -144,6 +147,7 @@ def build_ros_graph(stage, robot_prim_path, base_link_path, domain_id=0):
                 ("Context.outputs:context", "PublishClock.inputs:context"),
                 ("Context.outputs:context", "PublishJointState.inputs:context"),
                 ("Context.outputs:context", "PublishTF.inputs:context"),
+                ("Context.outputs:context", "PublishTFStatic.inputs:context"),
                 ("Context.outputs:context", "PublishOdom.inputs:context"),
                 ("Context.outputs:context", "PublishOdomTF.inputs:context"),
                 ("Context.outputs:context", "SubscribeTwist.inputs:context"),
@@ -164,6 +168,8 @@ def build_ros_graph(stage, robot_prim_path, base_link_path, domain_id=0):
                 ("PublishClock.inputs:topicName", "/clock"),
                 ("PublishJointState.inputs:topicName", "/joint_states"),
                 ("PublishTF.inputs:topicName", "/tf"),
+                ("PublishTFStatic.inputs:topicName", "/tf_static"),
+                ("PublishTFStatic.inputs:staticPublisher", True),
                 ("PublishOdom.inputs:topicName", "/odom"),
 
                 # topics.md requires exactly these frame ids.
@@ -184,6 +190,8 @@ def build_ros_graph(stage, robot_prim_path, base_link_path, domain_id=0):
     set_targets(stage, f"{GRAPH_PATH}/ComputeOdom", "inputs:chassisPrim",
                 [base_link_path])
     set_targets(stage, f"{GRAPH_PATH}/PublishTF", "inputs:targetPrims",
+                [robot_prim_path])
+    set_targets(stage, f"{GRAPH_PATH}/PublishTFStatic", "inputs:targetPrims",
                 [robot_prim_path])
 
     log("graph built")
