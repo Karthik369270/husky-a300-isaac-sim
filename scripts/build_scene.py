@@ -40,6 +40,8 @@ parser.add_argument("--save-usd", default="",
                     help="Optional path to save the composed stage")
 parser.add_argument("--frames", type=int, default=0,
                     help="Run N frames then exit (0 = run forever)")
+parser.add_argument("--camera", action="store_true",
+                    help="Publish the ZED camera (bonus task)")
 parser.add_argument("--no-ros", action="store_true",
                     help="Skip the ROS 2 graph (scene/articulation testing only)")
 parser.add_argument("--domain-id", type=int, default=0, help="ROS_DOMAIN_ID")
@@ -72,6 +74,7 @@ from isaacsim.core.utils.extensions import enable_extension  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ros_graphs  # noqa: E402
+import sensors  # noqa: E402
 
 # The four driven joints, named exactly as in the URDF (see docs/topics.md).
 WHEEL_JOINTS = [
@@ -325,6 +328,8 @@ def main():
             controller = ros_graphs.SkidSteerController(
                 drives, multiplier=args.scrub_multiplier
             )
+            if args.camera:
+                sensors.setup_camera(stage, prim_path)
 
     if args.save_usd:
         stage.Export(args.save_usd)
