@@ -91,7 +91,7 @@ Containerised entry point:
 docker compose -f docker/docker-compose.yml up
 ```
 
-See *What does not work* regarding the container.
+See [What works / what does not](#what-works--what-does-not) regarding the container.
 
 ### Useful flags
 
