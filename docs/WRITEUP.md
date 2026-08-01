@@ -58,6 +58,9 @@ predictable from the URDF alone. Rather than hardcode a guess, `build_scene.py`
 traverses the stage matching link and joint names, and dumps every joint-like
 prim if a lookup fails. A wrong assumption costs one run instead of an hour.
 
+The same principle applies to the RTX LiDAR: the prim path is read back from the
+creation command's return value rather than constructed from its arguments.
+
 ### Velocity drives, stiffness zero
 
 All four wheel joints use `UsdPhysics.DriveAPI` angular drives with stiffness 0,
@@ -113,8 +116,8 @@ in `config/husky.rviz` for completeness.
 ## Challenges
 
 Roughly two thirds of the elapsed time went to environment problems rather than
-to the assignment itself. Recording them since the brief asks for challenges
-encountered.
+to the assignment itself. The brief asks for challenges encountered, so they are
+recorded here.
 
 **NGC registry authentication.** The `nvcr.io/nvidia/isaac-sim:5.1.0` container
 could not be pulled — repeated `docker login failed` with an empty
@@ -133,11 +136,22 @@ Re-provisioning on 580.159.03 / CUDA 13.0 resolved it immediately. The lesson is
 that "580 or higher" is wrong; the RTX renderer wants the version NVIDIA
 actually tested.
 
-**Missing graphics libraries.** The CUDA base image ships no OpenGL or Vulkan
-runtime, so the MDL material system failed to load `libneuray.so`. Installing
-`libgl1`, `libegl1`, `libvulkan1` and the X11 support libraries fixed it — but
-installing `mesa-vulkan-drivers` alongside them made things worse, registering a
-software rasteriser that shadowed the NVIDIA ICD.
+**Vulkan device enumeration.** The CUDA base image ships no OpenGL or Vulkan
+runtime, so the MDL material system failed to load `libneuray.so` with
+`libGL.so.1: cannot open shared object file`. Installing `libgl1`, `libegl1`,
+`libvulkan1` and the X11 support libraries fixed that, but exposed a second
+problem: the container ran with `NVIDIA_DRIVER_CAPABILITIES=compute,utility`, so
+`/usr/share/vulkan/icd.d/` contained only Mesa ICDs — asahi, intel, nouveau,
+radeon, lvp — and no NVIDIA manifest. Vulkan therefore enumerated software
+rasterisers rather than the 4090.
+
+The NVIDIA libraries themselves were mounted (`libGLX_nvidia.so.0`,
+`libEGL_nvidia.so.0`, `libnvidia-glcore` were all present in
+`ldconfig -p`); only the ICD manifest that points Vulkan at them was missing.
+Writing `nvidia_icd.json` by hand with `"library_path": "libGLX_nvidia.so.0"`
+made `vulkaninfo` report the RTX 4090 correctly. Worth noting that installing
+`mesa-vulkan-drivers` is actively unhelpful here — it adds software rasterisers
+that compete with the device you want.
 
 **OmniGraph node path resolution.** Adding the camera nodes to the existing
 graph failed with `Failed to connect OnTick.outputs:tick ->
@@ -152,28 +166,41 @@ prim path passed to the render product had been *constructed* from the command
 arguments rather than read back from the command's return value, and the actual
 path differed. Using the returned prim fixed it.
 
-Every graph-building function in `ros_graphs.py` and `sensors.py` catches
-exceptions and dumps every attribute on the failing node with its resolved type.
-That diagnostic turned each of these from a guessing game into a single
-iteration, which mattered given the work was on metered hardware.
+The sensor graph builders in `sensors.py`, and the relationship-setting helper
+in `ros_graphs.py`, catch exceptions and dump every attribute on the failing node
+with its resolved type. That diagnostic turned each of these from a guessing
+game into a single iteration, which mattered given the work was on metered
+hardware.
 
 ---
 
 ## Limitations
 
-Enumerated in the README under *Limitations*. The ones worth emphasising:
+Enumerated in full in the README. The ones worth emphasising:
 
 The **container recipe was never executed** — the development environment is
-itself a container without nested Docker support. It is provided as written and
+itself a container without nested Docker support, and the only local machine has
+6 GB of VRAM against Isaac Sim's 16 GB minimum. It is provided as written and
 labelled as untested rather than claimed as working.
 
+The **LiDAR uses a generic rotary profile.** This build ships no Ouster OS1
+configuration — `omni.sensors.nv.common/data/lidar/` contains Hesai, Velodyne,
+Luminar and `Example_*` profiles, but no OS1. `Example_Rotary` is used instead.
+The mount pose and `frame_id` are those of the OS1 as specified; the beam
+pattern is not. Motion distortion is also disabled
+(`MotionBVH for lidar model not enabled`), so returns are instantaneous rather
+than smeared across the sweep.
+
 The **camera image is dark** because the optical frame sits against the sensor
-arch enclosure. The topic, rate, frame and calibration are all correct; what the
-camera sees is largely the robot's own geometry.
+arch enclosure, so the camera renders largely the robot's own geometry. The
+topic, rate, frame and calibration are all correct; what it sees is not useful.
 
 The **IMU bonus is not implemented.** Isaac Sim 5.1 registers no
-`ROS2PublishImu` node, so it requires an IMU sensor wired to the generic
-`ROS2Publisher` with an explicit message type. Given a finite budget, an honest
+`ROS2PublishImu` node, so it requires an IMU sensor from
+`isaacsim.sensors.physics` wired to the generic `ROS2Publisher` with an explicit
+message type — a different pattern from the render-product-plus-helper approach
+that the camera and LiDAR share. The mount frame is already resolved; only the
+publisher wiring remains. Given a finite budget on metered hardware, an honest
 and complete write-up was judged more valuable than two additional points.
 
 ---
